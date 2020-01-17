@@ -1,4 +1,4 @@
-package consumer
+package consume
 
 import (
 	"bytes"
@@ -7,28 +7,41 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/jdextraze/go-gesclient/client"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/SpeedVan/go-common-eventstore/client/eventstore"
 	"github.com/SpeedVan/runtime-proxy/service"
+	"github.com/SpeedVan/runtime-proxy/service/localhttpcall"
+	"github.com/SpeedVan/runtime-proxy/worker/stage"
 )
 
-// CallConsumer todo
-type CallConsumer struct {
+// StageImpl todo
+type StageImpl struct {
+	stage.Stage
+	NextStage     stage.Stage
+	Stream        string
+	CallPort      string
 	Client        *eventstore.Client
 	LocalHTTPCall service.Call
-	StreamName    string
-	SubStopFunc   func()
+	CloseFunc     func() error
 }
 
 // New todo
-func New(name string, endpoint string, localhttpcall service.Call, StreamName string) (*CallConsumer, error) {
-	c, err := eventstore.New(name, false, endpoint, "", true, false)
+func New(stream, port string, httpclient *http.Client) (*StageImpl, error) {
+	c, err := eventstore.New(stream, false, "tcp://admin:changeit@10.121.117.207:1113", "", true, false)
 	if err != nil {
 		return nil, err
+	}
+
+	req, _ := http.NewRequest("PUT", "http://admin:changeit@10.121.117.207:2113/subscriptions/"+stream+"/Computer", nil)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := httpclient.Do(req)
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println(res.StatusCode)
 	}
 
 	//注册常规事件
@@ -39,26 +52,17 @@ func New(name string, endpoint string, localhttpcall service.Call, StreamName st
 	c.ErrorOccurred().Add(func(evt client.Event) error { log.Printf("Error: %+v", evt); return nil })
 	c.AuthenticationFailed().Add(func(evt client.Event) error { log.Printf("Auth failed: %+v", evt); return nil })
 
-	return &CallConsumer{
+	return &StageImpl{
+		Stream:        stream,
+		CallPort:      port,
 		Client:        c,
-		LocalHTTPCall: localhttpcall,
-		StreamName:    StreamName,
+		LocalHTTPCall: localhttpcall.New(port, httpclient),
 	}, nil
 }
 
-// Subscribe todo
-func (s *CallConsumer) Subscribe() {
-	fmt.Printf("all streams: %v", s.StreamName)
-	for _, sn := range s.StreamName {
-		stream := "fission-edit+" + sn
-		fmt.Printf("stream: %v", stream)
-		s.Source(stream)
-	}
-}
-
-// Source todo
-func (s *CallConsumer) Source(streamName string) {
-	task, err := s.Client.ConnectToPersistentSubscriptionAsync(streamName, "script_1", s.eventAppeared, subscriptionDropped, nil, 100, true)
+// Do todo
+func (s *StageImpl) Do() error {
+	task, err := s.Client.ConnectToPersistentSubscriptionAsync(s.Stream, "Computer", s.eventAppeared, subscriptionDropped, nil, 100, true)
 
 	if err != nil {
 		log.Printf("Error occured while subscribing to stream: %v", err)
@@ -67,51 +71,22 @@ func (s *CallConsumer) Source(streamName string) {
 	} else {
 		sub := task.Result().(client.PersistentSubscription)
 		log.Printf("SubscribeToStream result: %+v", sub)
-		s.SubStopFunc = func() { sub.Stop() }
+		s.CloseFunc = func() error { return sub.Stop() }
 	}
+	return nil
 }
 
-// Sink todo
-func (s *CallConsumer) Sink(streamName, eventType string, metadata, data []byte) {
-	id := uuid.Must(uuid.NewV4())
-	evt := client.NewEventData(id, eventType, true, data, metadata)
-	log.Printf("event sent, id: %s", id)
-	task, err := s.Client.AppendToStreamAsync(streamName, client.ExpectedVersion_Any, []*client.EventData{evt}, nil)
-	if err != nil {
-		log.Printf("Error occured while appending to stream: %v", err)
-	} else if err := task.Error(); err != nil {
-		log.Printf("Error occured while waiting for result of appending to stream: %v", err)
-	} else {
-		result := task.Result().(*client.WriteResult)
-		log.Printf("<- %+v", result)
-	}
+// Close todo
+func (s *StageImpl) Close() error {
+	return s.CloseFunc()
 }
 
-// Close close client
-func (s *CallConsumer) Close() error {
-	s.SubStopFunc()
-	err := s.Client.Close()
-	time.Sleep(10 * time.Millisecond)
-	return err
+// Next todo
+func (s *StageImpl) Next() stage.Stage {
+	return s.NextStage
 }
 
-// RequestEventMetadata todo
-type RequestEventMetadata struct {
-	ResponseStreamName string      `json:"responseStreamName"`
-	Method             string      `json:"method"`
-	Path               string      `json:"path"`
-	Header             http.Header `json:"header"`
-}
-
-// ResponseEventMetadata todo
-type ResponseEventMetadata struct {
-	EventID    string
-	StatusCode int
-	Status     string
-	Header     http.Header
-}
-
-func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.ResolvedEvent) error {
+func (s *StageImpl) eventAppeared(_ client.PersistentSubscription, e *client.ResolvedEvent) error {
 	bs := e.Event().Data()
 	id := e.Event().EventId().String()
 	log.Printf("event received, id: %s", id)
@@ -147,9 +122,38 @@ func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.
 	return nil
 }
 
-// func (s *CallConsumer) handleRequest(meta *RequestEventMetadata, bs)
+// Sink todo
+func (s *StageImpl) Sink(streamName, eventType string, metadata, data []byte) {
+	id := uuid.Must(uuid.NewV4())
+	evt := client.NewEventData(id, eventType, true, data, metadata)
+	log.Printf("event sent, id: %s", id)
+	task, err := s.Client.AppendToStreamAsync(streamName, client.ExpectedVersion_Any, []*client.EventData{evt}, nil)
+	if err != nil {
+		log.Printf("Error occured while appending to stream: %v", err)
+	} else if err := task.Error(); err != nil {
+		log.Printf("Error occured while waiting for result of appending to stream: %v", err)
+	} else {
+		result := task.Result().(*client.WriteResult)
+		log.Printf("<- %+v", result)
+	}
+}
 
 func subscriptionDropped(_ client.PersistentSubscription, r client.SubscriptionDropReason, err error) error {
 	log.Printf("subscription dropped: %s, %v", r, err)
 	return nil
+}
+
+type RequestEventMetadata struct {
+	ResponseStreamName string      `json:"responseStreamName"`
+	Method             string      `json:"method"`
+	Path               string      `json:"path"`
+	Header             http.Header `json:"header"`
+}
+
+// ResponseEventMetadata todo
+type ResponseEventMetadata struct {
+	EventID    string
+	StatusCode int
+	Status     string
+	Header     http.Header
 }
