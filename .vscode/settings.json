@@ -1,8 +1,0 @@
-{
-    "terminal.integrated.env.osx": {
-        "no_proxy": "localhost,127.0.0.1,localaddress,.localdomain.com",
-        "http_proxy": "http://127.0.0.1:1087/",
-        "https_proxy": "http://127.0.0.1:1087/"
-    },
-    "http.proxy": "http://127.0.0.1:1087/"
-}
