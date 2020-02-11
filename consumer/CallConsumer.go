@@ -49,11 +49,12 @@ func New(name string, endpoint string, localhttpcall service.Call, StreamName st
 // Subscribe todo
 func (s *CallConsumer) Subscribe() {
 	fmt.Printf("all streams: %v", s.StreamName)
-	for _, sn := range s.StreamName {
-		stream := "fission-edit+" + sn
-		fmt.Printf("stream: %v", stream)
-		s.Source(stream)
-	}
+	// for _, sn := range s.StreamName {
+	// 	stream := "fission-edit+" + sn
+	// 	fmt.Printf("stream: %v", stream)
+	// 	s.Source(stream)
+	// }
+	s.Source(s.StreamName)
 }
 
 // Source todo
@@ -97,18 +98,20 @@ func (s *CallConsumer) Close() error {
 
 // RequestEventMetadata todo
 type RequestEventMetadata struct {
-	ResponseStreamName string      `json:"responseStreamName"`
-	Method             string      `json:"method"`
-	Path               string      `json:"path"`
-	Header             http.Header `json:"header"`
+	ResponseStreamName string                 `json:"responseStreamName"`
+	Context            map[string]interface{} `json:"context"`
+	Method             string                 `json:"method"`
+	Path               string                 `json:"path"`
+	Header             http.Header            `json:"header"`
 }
 
 // ResponseEventMetadata todo
 type ResponseEventMetadata struct {
-	EventID    string
-	StatusCode int
-	Status     string
-	Header     http.Header
+	Context        map[string]interface{}
+	RequestEventID string
+	StatusCode     int
+	Status         string
+	Header         http.Header
 }
 
 func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.ResolvedEvent) error {
@@ -121,7 +124,12 @@ func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.
 		return err
 	}
 
-	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, requestEventMetadata.Header, bytes.NewReader(bs))
+	ctx := requestEventMetadata.Context
+	reqHeader := requestEventMetadata.Header.Clone()
+	reqHeader.Set("X-Trace-Id", fmt.Sprint(ctx["X-Trace-Id"]))
+	reqHeader.Set("X-Request-Id", fmt.Sprint(ctx["X-Request-Id"]))
+
+	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, reqHeader, bytes.NewReader(bs))
 	data := []byte{}
 	if err != nil {
 		data = []byte(err.Error())
@@ -129,10 +137,11 @@ func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.
 		data, _ = ioutil.ReadAll(resBody)
 	}
 	resMeta := &ResponseEventMetadata{
-		EventID:    id,
-		StatusCode: statusCode,
-		Status:     status,
-		Header:     resHeader,
+		Context:        requestEventMetadata.Context,
+		RequestEventID: id,
+		StatusCode:     statusCode,
+		Status:         status,
+		Header:         resHeader,
 	}
 
 	metadata, _ := json.Marshal(resMeta)

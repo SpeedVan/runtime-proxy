@@ -96,6 +96,11 @@ func (s *StageImpl) eventAppeared(_ client.PersistentSubscription, e *client.Res
 		return err
 	}
 
+	ctx := requestEventMetadata.Context
+	reqHeader := requestEventMetadata.Header.Clone()
+	reqHeader.Set("X-Trace-Id", fmt.Sprint(ctx["X-Trace-Id"]))
+	reqHeader.Set("X-Request-Id", fmt.Sprint(ctx["X-Request-Id"]))
+
 	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, requestEventMetadata.Header, bytes.NewReader(bs))
 	data := []byte{}
 	if err != nil {
@@ -104,10 +109,10 @@ func (s *StageImpl) eventAppeared(_ client.PersistentSubscription, e *client.Res
 		data, _ = ioutil.ReadAll(resBody)
 	}
 	resMeta := &ResponseEventMetadata{
-		EventID:    id,
-		StatusCode: statusCode,
-		Status:     status,
-		Header:     resHeader,
+		RequestEventID: id,
+		StatusCode:     statusCode,
+		Status:         status,
+		Header:         resHeader,
 	}
 
 	metadata, _ := json.Marshal(resMeta)
@@ -144,16 +149,18 @@ func subscriptionDropped(_ client.PersistentSubscription, r client.SubscriptionD
 }
 
 type RequestEventMetadata struct {
-	ResponseStreamName string      `json:"responseStreamName"`
-	Method             string      `json:"method"`
-	Path               string      `json:"path"`
-	Header             http.Header `json:"header"`
+	ResponseStreamName string                 `json:"responseStreamName"`
+	Context            map[string]interface{} `json:"context"`
+	Method             string                 `json:"method"`
+	Path               string                 `json:"path"`
+	Header             http.Header            `json:"header"`
 }
 
 // ResponseEventMetadata todo
 type ResponseEventMetadata struct {
-	EventID    string
-	StatusCode int
-	Status     string
-	Header     http.Header
+	Context        map[string]interface{} `json:"context"`
+	RequestEventID string
+	StatusCode     int
+	Status         string
+	Header         http.Header
 }
