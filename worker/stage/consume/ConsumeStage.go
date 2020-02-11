@@ -98,8 +98,10 @@ func (s *StageImpl) eventAppeared(_ client.PersistentSubscription, e *client.Res
 
 	ctx := requestEventMetadata.Context
 	reqHeader := requestEventMetadata.Header.Clone()
-	reqHeader.Set("X-Trace-Id", fmt.Sprint(ctx["X-Trace-Id"]))
-	reqHeader.Set("X-Request-Id", fmt.Sprint(ctx["X-Request-Id"]))
+	traceID := fmt.Sprint(ctx["X-Trace-Id"])
+	requestID := fmt.Sprint(ctx["X-Request-Id"])
+	reqHeader.Set("X-Trace-Id", traceID)
+	reqHeader.Set("X-Request-Id", requestID)
 
 	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, requestEventMetadata.Header, bytes.NewReader(bs))
 	data := []byte{}
@@ -109,6 +111,7 @@ func (s *StageImpl) eventAppeared(_ client.PersistentSubscription, e *client.Res
 		data, _ = ioutil.ReadAll(resBody)
 	}
 	resMeta := &ResponseEventMetadata{
+		Context:        ctx,
 		RequestEventID: id,
 		StatusCode:     statusCode,
 		Status:         status,
