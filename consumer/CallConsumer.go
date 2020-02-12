@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/jdextraze/go-gesclient/client"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/SpeedVan/go-common-eventstore/client/eventstore"
+	"github.com/SpeedVan/go-common-faas/constant/httpconst"
+	"github.com/SpeedVan/go-common-faas/struct/eventstruct"
 	"github.com/SpeedVan/runtime-proxy/service"
 )
 
@@ -96,29 +97,11 @@ func (s *CallConsumer) Close() error {
 	return err
 }
 
-// RequestEventMetadata todo
-type RequestEventMetadata struct {
-	ResponseStreamName string                 `json:"responseStreamName"`
-	Context            map[string]interface{} `json:"context"`
-	Method             string                 `json:"method"`
-	Path               string                 `json:"path"`
-	Header             http.Header            `json:"header"`
-}
-
-// ResponseEventMetadata todo
-type ResponseEventMetadata struct {
-	Context        map[string]interface{}
-	RequestEventID string
-	StatusCode     int
-	Status         string
-	Header         http.Header
-}
-
 func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.ResolvedEvent) error {
 	bs := e.Event().Data()
 	id := e.Event().EventId().String()
 	log.Printf("event received, id: %s", id)
-	requestEventMetadata := &RequestEventMetadata{}
+	requestEventMetadata := &eventstruct.RequestEventMetadata{}
 	err := json.Unmarshal(e.Event().Metadata(), requestEventMetadata)
 	if err != nil {
 		return err
@@ -126,8 +109,8 @@ func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.
 
 	ctx := requestEventMetadata.Context
 	reqHeader := requestEventMetadata.Header.Clone()
-	reqHeader.Set("X-Trace-Id", fmt.Sprint(ctx["X-Trace-Id"]))
-	reqHeader.Set("X-Request-Id", fmt.Sprint(ctx["X-Request-Id"]))
+	reqHeader.Set(httpconst.TraceID, fmt.Sprint(ctx[httpconst.TraceID]))
+	reqHeader.Set(httpconst.RequestID, fmt.Sprint(ctx[httpconst.RequestID]))
 
 	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, reqHeader, bytes.NewReader(bs))
 	data := []byte{}
@@ -136,7 +119,7 @@ func (s *CallConsumer) eventAppeared(_ client.PersistentSubscription, e *client.
 	} else {
 		data, _ = ioutil.ReadAll(resBody)
 	}
-	resMeta := &ResponseEventMetadata{
+	resMeta := &eventstruct.ResponseEventMetadata{
 		Context:        requestEventMetadata.Context,
 		RequestEventID: id,
 		StatusCode:     statusCode,

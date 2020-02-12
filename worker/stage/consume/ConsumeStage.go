@@ -12,6 +12,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/SpeedVan/go-common-eventstore/client/eventstore"
+	"github.com/SpeedVan/go-common-faas/constant/httpconst"
+	"github.com/SpeedVan/go-common-faas/struct/eventstruct"
 	"github.com/SpeedVan/runtime-proxy/service"
 	"github.com/SpeedVan/runtime-proxy/service/localhttpcall"
 	"github.com/SpeedVan/runtime-proxy/worker/stage"
@@ -90,27 +92,26 @@ func (s *StageImpl) eventAppeared(_ client.PersistentSubscription, e *client.Res
 	bs := e.Event().Data()
 	id := e.Event().EventId().String()
 	log.Printf("event received, id: %s", id)
-	requestEventMetadata := &RequestEventMetadata{}
-	err := json.Unmarshal(e.Event().Metadata(), requestEventMetadata)
+	requestEventMetadata, err := eventstruct.FromHTTPRequestJSONBytes(e.Event().Metadata())
 	if err != nil {
 		return err
 	}
 
 	ctx := requestEventMetadata.Context
 	reqHeader := requestEventMetadata.Header.Clone()
-	traceID := fmt.Sprint(ctx["X-Trace-Id"])
-	requestID := fmt.Sprint(ctx["X-Request-Id"])
-	reqHeader.Set("X-Trace-Id", traceID)
-	reqHeader.Set("X-Request-Id", requestID)
+	traceID := fmt.Sprint(ctx[httpconst.TraceID])
+	requestID := fmt.Sprint(ctx[httpconst.RequestID])
+	reqHeader.Set(httpconst.TraceID, traceID)
+	reqHeader.Set(httpconst.RequestID, requestID)
 
-	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, requestEventMetadata.Header, bytes.NewReader(bs))
+	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, reqHeader, bytes.NewReader(bs))
 	data := []byte{}
 	if err != nil {
 		data = []byte(err.Error())
 	} else {
 		data, _ = ioutil.ReadAll(resBody)
 	}
-	resMeta := &ResponseEventMetadata{
+	resMeta := &eventstruct.ResponseEventMetadata{
 		Context:        ctx,
 		RequestEventID: id,
 		StatusCode:     statusCode,
@@ -149,21 +150,4 @@ func (s *StageImpl) Sink(streamName, eventType string, metadata, data []byte) {
 func subscriptionDropped(_ client.PersistentSubscription, r client.SubscriptionDropReason, err error) error {
 	log.Printf("subscription dropped: %s, %v", r, err)
 	return nil
-}
-
-type RequestEventMetadata struct {
-	ResponseStreamName string                 `json:"responseStreamName"`
-	Context            map[string]interface{} `json:"context"`
-	Method             string                 `json:"method"`
-	Path               string                 `json:"path"`
-	Header             http.Header            `json:"header"`
-}
-
-// ResponseEventMetadata todo
-type ResponseEventMetadata struct {
-	Context        map[string]interface{} `json:"context"`
-	RequestEventID string
-	StatusCode     int
-	Status         string
-	Header         http.Header
 }

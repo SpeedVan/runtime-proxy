@@ -2,6 +2,8 @@ github.com/SpeedVan/go-common v0.0.0-20200110071555-255fbf0848e7 h1:dCondfvN4ujz
 github.com/SpeedVan/go-common v0.0.0-20200110071555-255fbf0848e7/go.mod h1:7QNBYbKndOK/1GUYoAjcZlyhF8c6eJY1GOxW9179MWM=
 github.com/SpeedVan/go-common-eventstore v0.0.0-20191213022241-7e8b02752fb4 h1:dPYcoXjJmT/pSc+ukSIP+eC2ULxxl5jIprQIzBdsAME=
 github.com/SpeedVan/go-common-eventstore v0.0.0-20191213022241-7e8b02752fb4/go.mod h1:bqrxTt72fuH/ecWU6NJkQD796xhujVKljr5sXbG4jLk=
+github.com/SpeedVan/go-common-faas v0.0.0-20200212084258-c38a3517d3c1 h1:Jst48yInrSu/zZvOE9WTXN+4AQ8Dq7gy7Zm20uMxGCI=
+github.com/SpeedVan/go-common-faas v0.0.0-20200212084258-c38a3517d3c1/go.mod h1:uMXrDLD1XXpX0Chr4M3nd8IStiOoiV572LY5IssISxI=
 github.com/golang/protobuf v0.0.0-20190109072247-347cf4a86c1c h1:EbwRu34LWoT5qLHr7vBWMyq7y3UKnqA8oUprhXG0ags=
 github.com/golang/protobuf v0.0.0-20190109072247-347cf4a86c1c/go.mod h1:Qd/q+1AKNOZr9uGQzbzCmRO6sUih6GTPZv6a1/R87v0=
 github.com/gorilla/mux v1.7.3 h1:gnP5JzjVOuiZD07fKKToCAOjS0yOpj/qPETTXCCS6hw=
