@@ -103,6 +103,7 @@ func (s *StageImpl) eventAppeared(_ client.PersistentSubscription, e *client.Res
 	requestID := fmt.Sprint(ctx[httpconst.RequestID])
 	reqHeader.Set(httpconst.TraceID, traceID)
 	reqHeader.Set(httpconst.RequestID, requestID)
+	reqHeader.Set(httpconst.EventID, id)
 
 	statusCode, status, resHeader, resBody, err := s.LocalHTTPCall.Call(requestEventMetadata.Method, requestEventMetadata.Path, reqHeader, bytes.NewReader(bs))
 	data := []byte{}
