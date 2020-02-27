@@ -64,7 +64,7 @@ func New(stream, port string, httpclient *http.Client) (*StageImpl, error) {
 
 // Do todo
 func (s *StageImpl) Do() error {
-	task, err := s.Client.ConnectToPersistentSubscriptionAsync(s.Stream, "Computer", s.eventAppeared, subscriptionDropped, nil, 100, true)
+	task, err := s.Client.ConnectToPersistentSubscriptionAsync(s.Stream, "Computer", s.eventAppeared, subscriptionDropped, nil, 1, true)
 
 	if err != nil {
 		log.Printf("Error occured while subscribing to stream: %v", err)
